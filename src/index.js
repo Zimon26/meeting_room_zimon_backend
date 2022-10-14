@@ -1,10 +1,12 @@
 import cors from 'cors'
 import dayjs from 'dayjs'
 import customParseFormat from 'dayjs/plugin/customParseFormat.js'
+import utc from 'dayjs/plugin/utc.js'
 import express from 'express'
 import mysql from 'mysql'
 
 dayjs.extend(customParseFormat)
+dayjs.extend(utc)
 
 function getDay(str) {
   let i = 0
@@ -38,14 +40,16 @@ app.use(express.json())
 app.use(express.urlencoded({ extended: false }))
 
 app.get('/meetingInfo', (req, res) => {
-  res.send([
-    { id: 100, time: '2022-10-6', title: '综合设计', holder: 'Zimon' },
-    { id: 101, time: '2022-10-6', title: '综合设计', holder: 'Zimon' },
-    { id: 102, time: '2022-10-6', title: '综合设计', holder: 'Zimon' }
-  ])
+  const sql = `select * from meeting_info where meetingHolder = "${req.query.meetingHolder}" limit 5`
+  db.query(sql, (err, result) => {
+    if (err) return console.log(err.message)
+    console.log(result)
+    res.send(result)
+  })
 })
 
 app.get('/userMeetingsToConfig', (req, res) => {
+  // 这个地方还没考虑用户表联动，所以也是假数据
   res.send([
     {
       meetingID: 0,
@@ -111,72 +115,106 @@ app.get('/searchMeetingRoomList', (req, res) => {
 // 根据查询的条件返回对应的会议信息
 app.get('/searchMeetingLimits', (req, res) => {
   // 获取到查询条件，发给数据库查询
-  console.log(req.query)
-  // 查询的日期信息
-  const day = getDay(req.query.meetingDay)
-  res.send([
-    {
-      meetingTitle: '综合设计',
-      meetingTimeAll: '2022-10-11 22:00',
-      meetingDuration: '3',
-      meetingHolder: 'Zimon',
-      roomID: '228'
-    },
-    {
-      meetingTitle: '综合设计',
-      meetingTimeAll: '2022-10-11 22:00',
-      meetingDuration: '3',
-      meetingHolder: 'Zimon',
-      roomID: '228'
-    },
-    {
-      meetingTitle: '综合设计',
-      meetingTimeAll: '2022-10-11 22:00',
-      meetingDuration: '3',
-      meetingHolder: 'Zimon',
-      roomID: '228'
-    },
-    {
-      meetingTitle: '综合设计',
-      meetingTimeAll: '2022-10-11 22:00',
-      meetingDuration: '3',
-      meetingHolder: 'Zimon',
-      roomID: '228'
-    }
-  ])
+  // console.log(req.query.meetingDay)
+  // console.log(typeof req.query.meetingDay)
+  let day = ''
+  if (req.query.meetingDay === '') {
+    day = ''
+  } else {
+    let tempTime = dayjs(req.query.meetingDay)
+    tempTime = dayjs.utc(tempTime).local().format('YYYY-MM-DDTHH:mm').toString()
+    // console.log(tempTime)
+    // 查询的日期信息
+    day = getDay(tempTime)
+  }
+
+  console.log(day)
+  const roomID = req.query.roomID
+  let sql = ''
+  // 先处理只有房间号的信息
+  if (!day) {
+    sql = `select * from meeting_info where roomID = ${roomID}`
+  } else if (!roomID) {
+    sql = `select * from meeting_info where meetingDay = "${day}"`
+  } else {
+    sql = `select * from meeting_info where meetingDay like "${day}" and roomID = ${roomID}`
+  }
+  db.query(sql, (err, result) => {
+    if (err) return console.log(err.message)
+    // console.log(result)
+    res.send(result)
+  })
+  // res.send([
+  //   {
+  //     meetingTitle: '综合设计',
+  //     meetingTimeAll: '2022-10-11 22:00',
+  //     meetingDuration: '3',
+  //     meetingHolder: 'Zimon',
+  //     roomID: '228'
+  //   },
+  //   {
+  //     meetingTitle: '综合设计',
+  //     meetingTimeAll: '2022-10-11 22:00',
+  //     meetingDuration: '3',
+  //     meetingHolder: 'Zimon',
+  //     roomID: '228'
+  //   },
+  //   {
+  //     meetingTitle: '综合设计',
+  //     meetingTimeAll: '2022-10-11 22:00',
+  //     meetingDuration: '3',
+  //     meetingHolder: 'Zimon',
+  //     roomID: '228'
+  //   },
+  //   {
+  //     meetingTitle: '综合设计',
+  //     meetingTimeAll: '2022-10-11 22:00',
+  //     meetingDuration: '3',
+  //     meetingHolder: 'Zimon',
+  //     roomID: '228'
+  //   }
+  // ])
 })
 
 app.get('/meetingRecord', (req, res) => {
-  res.send([
-    {
-      meetingTitle: '综合设计',
-      meetingTimeAll: '2022-10-11 22:00',
-      meetingDuration: '3',
-      meetingHolder: 'Zimon',
-      roomID: '228'
-    },
-    {
-      meetingTitle: '综合设计',
-      meetingTimeAll: '2022-10-11 22:00',
-      meetingDuration: '3',
-      meetingHolder: 'Zimon',
-      roomID: '228'
-    },
-    {
-      meetingTitle: '综合设计',
-      meetingTimeAll: '2022-10-11 22:00',
-      meetingDuration: '3',
-      meetingHolder: 'Zimon',
-      roomID: '228'
-    },
-    {
-      meetingTitle: '综合设计',
-      meetingTimeAll: '2022-10-11 22:00',
-      meetingDuration: '3',
-      meetingHolder: 'Zimon',
-      roomID: '228'
-    }
-  ])
+  // 首先应该获取当前的用户名
+  // console.log(req.query)
+  const sql = `select * from meeting_info where meetingHolder = "${req.query.meetingHolder}"`
+  db.query(sql, (err, result) => {
+    if (err) return console.log(err.message)
+    // console.log(result)
+    res.send(result)
+  })
+  // res.send([
+  //   {
+  //     meetingTitle: '综合设计',
+  //     meetingTimeAll: '2022-10-11 22:00',
+  //     meetingDuration: '3',
+  //     meetingHolder: 'Zimon',
+  //     roomID: '228'
+  //   },
+  //   {
+  //     meetingTitle: '综合设计',
+  //     meetingTimeAll: '2022-10-11 22:00',
+  //     meetingDuration: '3',
+  //     meetingHolder: 'Zimon',
+  //     roomID: '228'
+  //   },
+  //   {
+  //     meetingTitle: '综合设计',
+  //     meetingTimeAll: '2022-10-11 22:00',
+  //     meetingDuration: '3',
+  //     meetingHolder: 'Zimon',
+  //     roomID: '228'
+  //   },
+  //   {
+  //     meetingTitle: '综合设计',
+  //     meetingTimeAll: '2022-10-11 22:00',
+  //     meetingDuration: '3',
+  //     meetingHolder: 'Zimon',
+  //     roomID: '228'
+  //   }
+  // ])
 })
 
 app.post('/addMeeting', (req, res) => {
@@ -191,7 +229,8 @@ app.post('/addMeeting', (req, res) => {
   //   i++
   // }
   const day = getDay(req.body.addMeetingForm.meetingDay)
-  const timeStr = day + ' ' + req.body.addMeetingForm.meetingTime;
+  // 不采用这种混合方式存储数据，分立存储时间和日期
+  // const timeStr = day + ' ' + req.body.addMeetingForm.meetingTime;
 
   // 这个位置用来判断是否有时间的冲突，非常重要，后续添加
 
@@ -199,8 +238,8 @@ app.post('/addMeeting', (req, res) => {
   // console.log(time.$d instanceof Date)
   // 把数据都存到数据库
   const form = req.body.addMeetingForm
-  const sql = 'insert into meeting_info (meetingTitle, meetingTime, meetingDuration, roomID, meetingHolder) values(?, ?, ?, ?, ?)'
-  db.query(sql, [form.meetingTitle, timeStr, form.meetingDuration, form.roomID, form.meetingHolder], (err, result) => {
+  const sql = 'insert into meeting_info (meetingTitle, meetingDay, meetingTime, meetingDuration, roomID, meetingHolder) values(?, ?, ?, ?, ?, ?)'
+  db.query(sql, [form.meetingTitle, day, form.meetingTime, form.meetingDuration, form.roomID, form.meetingHolder], (err, result) => {
     if (err) return console.log(err.message)
     if (result.affectedRows === 1) {
       // 插入数据成功，用res返回正确的消息
