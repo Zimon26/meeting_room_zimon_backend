@@ -19,6 +19,26 @@ function getDay(str) {
   return str.slice(0, i)
 }
 
+function timeTransform(meetingTime, meetingDuration) {
+  let hours = meetingTime.slice(0, 2)
+  hours = parseInt(hours)
+  console.log('hours ' + hours)
+  let minutes = meetingTime.slice(2)
+  console.log('minutes ' + minutes)
+  if (minutes === ':00') {
+    minutes = 0
+  } else if (minutes === ':15') {
+    minutes = 0.25
+  } else if (minutes === ':30') {
+    minutes = 0.5
+  } else {
+    minutes = 0.75
+  }
+  let startTime = hours + minutes
+  let endTime = startTime + meetingDuration * 0.5
+  return [startTime, endTime]
+}
+
 const db = mysql.createPool({
   host: '127.0.0.1',
   user: 'root',
@@ -43,7 +63,7 @@ app.get('/meetingInfo', (req, res) => {
   const sql = `select * from meeting_info where meetingHolder = "${req.query.meetingHolder}" limit 5`
   db.query(sql, (err, result) => {
     if (err) return console.log(err.message)
-    console.log(result)
+    // console.log(result)
     res.send(result)
   })
 })
@@ -137,7 +157,7 @@ app.get('/searchMeetingLimits', (req, res) => {
   } else if (!roomID) {
     sql = `select * from meeting_info where meetingDay = "${day}"`
   } else {
-    sql = `select * from meeting_info where meetingDay like "${day}" and roomID = ${roomID}`
+    sql = `select * from meeting_info where meetingDay = "${day}" and roomID = ${roomID}`
   }
   db.query(sql, (err, result) => {
     if (err) return console.log(err.message)
@@ -218,7 +238,7 @@ app.get('/meetingRecord', (req, res) => {
 })
 
 app.post('/addMeeting', (req, res) => {
-  console.log(req.body)
+  // console.log(req.body)
   // 把req.body的数据加到数据库
   // 要先把meetingDay和meetingTime整合，向服务器递交的数据就是time内部的$d，实际上就是date对象
   // let i = 0
@@ -228,7 +248,87 @@ app.post('/addMeeting', (req, res) => {
   //   }
   //   i++
   // }
-  const day = getDay(req.body.addMeetingForm.meetingDay)
+  const form = req.body.addMeetingForm
+  let tempTime = dayjs(form.meetingDay)
+  tempTime = dayjs.utc(tempTime).local().format('YYYY-MM-DDTHH:mm').toString()
+  const newDay = getDay(tempTime)
+  console.log(newDay)
+  const newRoomID = form.roomID
+  const newTime = form.meetingTime
+  const newDuration = form.meetingDuration
+  const sql = `select * from meeting_info where meetingDay = "${newDay}" and roomID = ${newRoomID}`
+  db.query(sql, (err, result) => {
+    if (err) return console.log(err.message)
+    // console.log(result)
+    const similarMeetings = result
+    console.log('相似的会议是这些')
+    console.log(similarMeetings)
+    console.log('--')
+    if (similarMeetings.length) {
+      let time = []
+      let newTimer = timeTransform(newTime, newDuration)
+      console.log('newTimer是')
+      console.log(newTimer)
+      console.log('--')
+      let flag = similarMeetings.every(item => {
+        // 开始比较会议是否合法
+        time = timeTransform(item.meetingTime, item.meetingDuration)
+        console.log(time)
+        return newTimer[0] >= time[1] || newTimer[1] <= time[0]
+      })
+      if (!flag) {
+        console.log('不行')
+        return res.send({
+          message: 'conflict'
+        })
+      }
+    }
+    console.log('req.body.type = ' + req.body.type)
+    if (req.body.type === 0) {
+      console.log('新增会议')
+      const sql2 = 'insert into meeting_info (meetingTitle, meetingDay, meetingTime, meetingDuration, roomID, meetingHolder) values(?, ?, ?, ?, ?, ?)'
+      db.query(sql2, [form.meetingTitle, newDay, form.meetingTime, form.meetingDuration, form.roomID, form.meetingHolder], (err, result) => {
+        if (err) return console.log(err.message)
+        if (result.affectedRows === 1) {
+          // 插入数据成功，用res返回正确的消息
+          res.send({
+            message: 'ok'
+          })
+        }
+      })
+    } else {
+      console.log('修改会议')
+      const sql2 = 'update meeting_info set meetingTitle = ?, meetingDay = ?, meetingTime = ?, meetingDuration = ?, roomID = ?, meetingHolder = ? where meetingID = ?'
+      db.query(sql2, [form.meetingTitle, newDay, form.meetingTime, form.meetingDuration, form.roomID, form.meetingHolder, form.meetingID], (err, result) => {
+        if (err) return console.log(err.message)
+        if (result.affectedRows === 1) {
+          // 插入数据成功，用res返回正确的消息
+          res.send({
+            message: 'ok'
+          })
+        }
+      })
+    }
+
+  })
+  // 判断会议的预定时间是否合法
+  // let { data: similarMeetings } = await this.http.get('searchMeetingLimits', {
+  //   params: {
+  //     meetingDay: this.addMeetingForm.meetingDay,
+  //     roomID: this.addMeetingForm.roomID
+  //   }
+  // })
+
+
+
+  // console.log(this.addMeetingForm)
+  // console.log('--')
+
+  // console.log('可能产生冲突的会议')
+  // console.log(similarMeetings)
+  // console.log('--')
+
+
   // 不采用这种混合方式存储数据，分立存储时间和日期
   // const timeStr = day + ' ' + req.body.addMeetingForm.meetingTime;
 
@@ -237,14 +337,7 @@ app.post('/addMeeting', (req, res) => {
   // let time = dayjs(timeStr, 'YYYY-MM-DD HH-mm').$d
   // console.log(time.$d instanceof Date)
   // 把数据都存到数据库
-  const form = req.body.addMeetingForm
-  const sql = 'insert into meeting_info (meetingTitle, meetingDay, meetingTime, meetingDuration, roomID, meetingHolder) values(?, ?, ?, ?, ?, ?)'
-  db.query(sql, [form.meetingTitle, day, form.meetingTime, form.meetingDuration, form.roomID, form.meetingHolder], (err, result) => {
-    if (err) return console.log(err.message)
-    if (result.affectedRows === 1) {
-      // 插入数据成功，用res返回正确的消息
-    }
-  })
+
 })
 
 app.listen(8888, () => {
