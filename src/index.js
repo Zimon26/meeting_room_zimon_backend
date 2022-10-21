@@ -252,65 +252,80 @@ app.post('/addMeeting', (req, res) => {
   let tempTime = dayjs(form.meetingDay)
   tempTime = dayjs.utc(tempTime).local().format('YYYY-MM-DDTHH:mm').toString()
   const newDay = getDay(tempTime)
-  console.log(newDay)
+  // console.log(newDay)
   const newRoomID = form.roomID
   const newTime = form.meetingTime
   const newDuration = form.meetingDuration
   const sql = `select * from meeting_info where meetingDay = "${newDay}" and roomID = ${newRoomID}`
-  db.query(sql, (err, result) => {
-    if (err) return console.log(err.message)
-    // console.log(result)
-    const similarMeetings = result
-    console.log('相似的会议是这些')
-    console.log(similarMeetings)
-    console.log('--')
-    if (similarMeetings.length) {
-      let time = []
-      let newTimer = timeTransform(newTime, newDuration)
-      console.log('newTimer是')
-      console.log(newTimer)
+
+  if (req.body.type === 2) {
+    console.log('删除会议')
+    console.log(form)
+    const sqlDelete = `delete from meeting_info where meetingID = ${form.meetingID}`
+    db.query(sqlDelete, (err, result) => {
+      if (err) {
+        console.log(err.message)
+        // 发送另一个错误代码
+      }
+      if (result.affectedRows === 1) return res.send({ message: 'ok' })
+    })
+  } else { // 是修改或者添加会议
+    db.query(sql, (err, result) => {
+      if (err) return console.log(err.message)
+      // console.log(result)
+      const similarMeetings = result
+      console.log('相似的会议是这些')
+      console.log(similarMeetings)
       console.log('--')
-      let flag = similarMeetings.every(item => {
-        // 开始比较会议是否合法
-        time = timeTransform(item.meetingTime, item.meetingDuration)
-        console.log(time)
-        return newTimer[0] >= time[1] || newTimer[1] <= time[0]
-      })
-      if (!flag) {
-        console.log('不行')
-        return res.send({
-          message: 'conflict'
+      if (similarMeetings.length) {
+        let time = []
+        let newTimer = timeTransform(newTime, newDuration)
+        console.log('newTimer是')
+        console.log(newTimer)
+        console.log('--')
+        let flag = similarMeetings.every(item => {
+          // 开始比较会议是否合法
+          time = timeTransform(item.meetingTime, item.meetingDuration)
+          console.log(time)
+          return newTimer[0] >= time[1] || newTimer[1] <= time[0]
+        })
+        if (!flag) {
+          console.log('不行')
+          return res.send({
+            message: 'conflict'
+          })
+        }
+      }
+      console.log('req.body.type = ' + req.body.type)
+      if (req.body.type === 0) {
+        console.log('新增会议')
+        const sql2 = 'insert into meeting_info (meetingTitle, meetingDay, meetingTime, meetingDuration, roomID, meetingHolder) values(?, ?, ?, ?, ?, ?)'
+        db.query(sql2, [form.meetingTitle, newDay, form.meetingTime, form.meetingDuration, form.roomID, form.meetingHolder], (err, result) => {
+          if (err) return console.log(err.message)
+          if (result.affectedRows === 1) {
+            // 插入数据成功，用res返回正确的消息
+            res.send({
+              message: 'ok'
+            })
+          }
+        })
+      } else if (req.body.type === 1) {
+        console.log('修改会议')
+        const sql2 = 'update meeting_info set meetingTitle = ?, meetingDay = ?, meetingTime = ?, meetingDuration = ?, roomID = ?, meetingHolder = ? where meetingID = ?'
+        db.query(sql2, [form.meetingTitle, newDay, form.meetingTime, form.meetingDuration, form.roomID, form.meetingHolder, form.meetingID], (err, result) => {
+          if (err) return console.log(err.message)
+          if (result.affectedRows === 1) {
+            // 插入数据成功，用res返回正确的消息
+            res.send({
+              message: 'ok'
+            })
+          }
         })
       }
-    }
-    console.log('req.body.type = ' + req.body.type)
-    if (req.body.type === 0) {
-      console.log('新增会议')
-      const sql2 = 'insert into meeting_info (meetingTitle, meetingDay, meetingTime, meetingDuration, roomID, meetingHolder) values(?, ?, ?, ?, ?, ?)'
-      db.query(sql2, [form.meetingTitle, newDay, form.meetingTime, form.meetingDuration, form.roomID, form.meetingHolder], (err, result) => {
-        if (err) return console.log(err.message)
-        if (result.affectedRows === 1) {
-          // 插入数据成功，用res返回正确的消息
-          res.send({
-            message: 'ok'
-          })
-        }
-      })
-    } else {
-      console.log('修改会议')
-      const sql2 = 'update meeting_info set meetingTitle = ?, meetingDay = ?, meetingTime = ?, meetingDuration = ?, roomID = ?, meetingHolder = ? where meetingID = ?'
-      db.query(sql2, [form.meetingTitle, newDay, form.meetingTime, form.meetingDuration, form.roomID, form.meetingHolder, form.meetingID], (err, result) => {
-        if (err) return console.log(err.message)
-        if (result.affectedRows === 1) {
-          // 插入数据成功，用res返回正确的消息
-          res.send({
-            message: 'ok'
-          })
-        }
-      })
-    }
+    })
+  }
 
-  })
+
   // 判断会议的预定时间是否合法
   // let { data: similarMeetings } = await this.http.get('searchMeetingLimits', {
   //   params: {
