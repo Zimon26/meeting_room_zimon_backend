@@ -59,6 +59,34 @@ app.use(cors())
 app.use(express.json())
 app.use(express.urlencoded({ extended: false }))
 
+app.get('/login', (req, res) => {
+  const sql = `select * from user_info where userID = "${req.query.userID}"`
+  db.query(sql, (err, result) => {
+    if (err) return console.log(err.message)
+    if (result[0].password !== req.query.password) {
+      res.send({ message: 'wrong' })
+    } else {
+      res.send({ message: 'ok' })
+      // 发送token等
+    }
+  })
+})
+
+app.get('/userInfo', (req, res) => {
+  const sql = `select * from user_info where userID = "${req.query.userID}"`
+  console.log(req.query.userID)
+  db.query(sql, (err, result) => {
+    if (err) return console.log(err.message)
+    if (result.length === 1) {
+      res.send({
+        username: result[0].username,
+        userAvatar: result[0].userAvatar,
+        userType: result[0].userType
+      })
+    }
+  })
+})
+
 app.get('/meetingInfo', (req, res) => {
   const sql = `select * from meeting_info where meetingHolder = "${req.query.meetingHolder}" limit 5`
   db.query(sql, (err, result) => {
